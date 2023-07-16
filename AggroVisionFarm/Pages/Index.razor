@@ -1,0 +1,124 @@
+﻿@page "/"
+@using AggroVisionFarm.Data
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@inject IHttpClientFactory ClientFactory
+
+
+<PageTitle>Animals</PageTitle>
+
+<h1>Animals</h1>
+
+<p>This component demonstrates fetching data from a service.</p>
+
+@if (getAnimalsError || farm == null)
+{
+	<p><em>Unable to retrieve animals from API</em></p>
+}
+else
+{
+	<div class="bg-blue-100">
+		<input class="border-1 w-1/3 rounded m-6 p-6 h-8 border-blue-300"
+			   placeholder="Search by animal number"
+		@bind-value="SearchText" />
+		<button class="border-1 rounded" @onclick="handleSearch">Search</button>
+
+		@if (searchError)
+		{
+			<em style="margin-left: 1em;color:red">@SearchResult</em>
+		}
+		else
+		{
+			@if (SearchResult != null)
+			{
+				<em style="margin-left: 1em;color:forestgreen">@SearchResult</em>
+			}
+		}
+
+
+	</div>
+
+	<table class="table">
+		<thead>
+			<tr>
+				<th>Animal Number</th>
+				<th>Gender</th>
+				<th>Children</th>
+			</tr>
+		</thead>
+		<tbody>
+			@foreach (Animal animal in farm.Values)
+			{
+				<tr>
+					<td>@animal.Number</td>
+					<td>@animal.Gender</td>
+					<td>@animal.getChildrenToString()</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+}
+
+@code {
+	private SortedDictionary<string, Animal> farm = new SortedDictionary<string, Animal>();
+	private readonly string URL = "https://agrovisioncodingtest.azurewebsites.net/Animals";
+	private bool getAnimalsError;
+	public string SearchText = "";
+	public string SearchResult;
+	public bool searchError;
+
+	// fetches the list of Animals upon page load
+	protected override async Task OnInitializedAsync()
+	{
+		var client = ClientFactory.CreateClient();
+		var httpResponse = await client.GetAsync(URL);
+
+		if (httpResponse.IsSuccessStatusCode)
+		{
+			var jsonResponse = await httpResponse.Content.ReadAsStreamAsync();
+			Animal ancestor = await JsonSerializer.DeserializeAsync<Animal>(jsonResponse);
+			if (ancestor != null) populateFarm(ancestor);
+		}
+		else
+		{
+			getAnimalsError = true;
+		}
+	}
+
+	// populates the "farm" dictionary, recursively
+	private void populateFarm(Animal animal)
+	{
+		farm.Add(animal.Number, animal);
+
+		if (!animal.Children.Any())
+		{
+			return;
+		}
+
+		foreach (Animal c in animal.Children)
+		{
+			populateFarm(c);
+		}
+	}
+
+	public void handleSearch()
+	{
+		if (string.IsNullOrWhiteSpace(SearchText))
+		{
+			SearchResult = "";
+			return;
+		}
+
+		if (farm.ContainsKey(SearchText.ToUpper()))
+		{
+			searchError = false;
+			Animal animal = farm[SearchText.ToUpper()];
+			SearchResult = string.Format("Animal {0} is a {1}", animal.Number, animal.Gender);
+		}
+		else
+		{
+			searchError = true;
+			SearchResult = "Animal not found!";
+		}
+	}
+}
